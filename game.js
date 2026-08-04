@@ -474,7 +474,7 @@
     ctx.strokeStyle = '#1c6636'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.ellipse(0,0,26,9,0,0,Math.PI*2); ctx.stroke();
     // stem - stretches up and tucks back down
-    const stemTop = -6 - stretch*30;
+    const stemTop = -6 - stretch*128; // reaches ~155px tall at full stretch - taller than the player's max jump (~133px), so blocking it actually looks right
     ctx.strokeStyle = '#2f8f4e'; ctx.lineWidth=8; ctx.lineCap='round';
     ctx.beginPath(); ctx.moveTo(0,-4); ctx.lineTo(0,stemTop); ctx.stroke();
     // flower head (bites) - follows the stem tip
