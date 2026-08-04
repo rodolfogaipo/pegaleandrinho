@@ -1097,11 +1097,22 @@
       game.throwT -= dt;
       if(game.throwT <= 0){
         game.throwT = 0.45;
-        game.projectiles.push({ x:game.px+game.facing*16, y:game.py-30, vx: game.facing*340, life:1.4 });
+        game.projectiles.push({ x:game.px+game.facing*16, y:game.py-30, vx: game.facing*300, vy:-60, life:2.2 });
         sfx.throwCan();
       }
     }
-    game.projectiles.forEach(pr => { pr.x += pr.vx*dt; pr.life -= dt; });
+    // cans arc and bounce off the ground, like Mario's fireballs
+    game.projectiles.forEach(pr => {
+      pr.x += pr.vx*dt;
+      pr.vy += 1500*dt;
+      pr.y += pr.vy*dt;
+      const floorY = groundY();
+      if(pr.y > floorY){
+        pr.y = floorY;
+        pr.vy = -Math.abs(pr.vy)*0.6; // bounce, losing some energy each time
+      }
+      pr.life -= dt;
+    });
     game.projectiles = game.projectiles.filter(pr => pr.life > 0);
 
     game.particles.forEach(pt => { pt.x+=pt.vx*dt; pt.y+=pt.vy*dt; pt.vy+=700*dt; pt.life-=dt; });
@@ -1147,12 +1158,28 @@
       else stretch = (t-(HOLD_UP+TRANS+HOLD_DOWN))/TRANS;                   // extending back up
       hz.stretch = Math.max(0, Math.min(1, stretch));
 
-      const half = (hz.w||20)/2 + 18;
+      const plantHeight = 29 + hz.stretch*128;
+
+      // a thrown can destroys the plant for good - the only way to kill it
+      for(const pr of game.projectiles){
+        if(pr.hit) continue;
+        if(Math.abs(pr.x-hz.x) < 24 && pr.y >= groundY()-plantHeight-16 && pr.y <= groundY()+12){
+          pr.hit = true; pr.life = 0;
+          hz.dead = true;
+          game.score += 40;
+          spawnParticles(hz.x, groundY()-plantHeight*0.55, '#2f8f4e', 18);
+          sfx.stomp();
+        }
+      }
+      if(hz.dead) continue;
+
+      // matches the actual rendered height of the plant (see
+      // drawVitoriaRegia: 29 + stretch*128) - no invisible wall, if the
+      // player is physically above where the plant reaches, they pass
+      // clean (e.g. jumping from an elevated block), no life lost.
+      const half = (hz.w||20)/2 + 16;
       if(Math.abs(hz.x-game.px) < half){
-        const fullyUp = hz.stretch > 0.85;
-        // while stretched up, NOTHING clears it - not even a full jump.
-        // only when it's tucked down (stretch near 0) can a jump pass over.
-        const cleared = !fullyUp && game.py <= groundY() - 46;
+        const cleared = game.py <= groundY() - plantHeight - 8;
         if(!cleared){
           const dir = game.px < hz.x ? -1 : 1;
           game.px = hz.x + dir*half;
@@ -1160,6 +1187,7 @@
         }
       }
     }
+    lvl.hazards = lvl.hazards.filter(hz => !hz.dead);
 
     // enemies
     const solids = lvl.platforms.filter(p=>p.bump).concat(lvl.hazards.map(h=>({x:h.x-h.w/2,w:h.w})));
