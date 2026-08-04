@@ -259,7 +259,7 @@
   }
 
   function drawLeandrinho(ctx, cx, cy, scale, opts){
-    drawChibi(ctx, cx, cy, scale, LEAN_PAL, opts, (ctx, hY, r, pal) => {
+    drawChibi(ctx, cx, cy, scale, LEAN_PAL, opts, (ctx, hY, r, pal, o) => {
       ctx.fillStyle = pal.cheek;
       ctx.beginPath(); ctx.ellipse(-r*0.55, hY+5, 4.4, 3.2, 0,0,Math.PI*2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(r*0.55, hY+5, 4.4, 3.2, 0,0,Math.PI*2); ctx.fill();
@@ -276,6 +276,16 @@
       ctx.beginPath(); ctx.arc(5.7,hY-1.2,0.9,0,Math.PI*2); ctx.fill();
       ctx.strokeStyle = '#7a3d1a'; ctx.lineWidth=1.6; ctx.lineCap='round';
       ctx.beginPath(); ctx.arc(0.5, hY+3, 5, 0.15*Math.PI, 0.85*Math.PI); ctx.stroke();
+      if(o && o.helmet){
+        ctx.fillStyle = '#48484f';
+        ctx.beginPath(); ctx.arc(0, hY-2, r+3, Math.PI*1.02, Math.PI*2.06); ctx.fill();
+        ctx.fillStyle = 'rgba(160,220,255,0.55)';
+        ctx.beginPath(); ctx.ellipse(0, hY+2, r-2, 5.5, 0, 0, Math.PI); ctx.fill();
+        ctx.strokeStyle = '#8a8a92'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(0, hY-2, r+3, Math.PI*1.02, Math.PI*2.06); ctx.stroke();
+        ctx.fillStyle = '#e6432c';
+        ctx.beginPath(); ctx.ellipse(0, hY-r-2, 5, 3, 0, 0, Math.PI*2); ctx.fill();
+      }
     });
   }
 
@@ -579,6 +589,7 @@
     rodolfo:  { skin:'#f2ddc9', hair:'#2a2a2a', overalls:'#5b2a86', overallsShade:'#431f66', shoe:'#3a2a10', eye:'#241a10', bodyW:30, mustache:true, glasses:true, crown:true, cape:true },
     mayra:    { skin:'#e8b48a', hair:'#4a1f0e', overalls:'#e0397a', overallsShade:'#a01f56', shoe:'#3a1a20', eye:'#241a10', bodyW:25, ponytail:true },
     marcotulio: { skin:'#caa06e', hair:'#241a10', overalls:'#2696b8', overallsShade:'#155f78', shoe:'#2a2a2a', eye:'#241a10', bodyW:28, mustache:true },
+    nilson: { skin:'#caa06e', hair:'#9a9a9a', overalls:'#4a4a52', overallsShade:'#33333a', shoe:'#2a2a2a', eye:'#241a10', bodyW:29, mustache:true, glasses:true },
   };
   function npcFace(ctx, hY, r, pal, opts){
     ctx.fillStyle = '#fff';
@@ -698,7 +709,8 @@
       npcs:[{ pos:'start', key:'daiane', name:'DAIANE', line:'O Lelê foi pra lá?' },
             { pos:'end', key:'leandro', name:'LEANDRO', line:'Meu filho!' }] },
     { key:'externo', name:'EXTERNO', icon:'🛵', width:13000, enemyPool:['geraldo','sol','sofrer','bola','veado','adriana'], hazard:false, bike:true,
-      theme:{ skyTop:'#6fb3e8', skyBot:'#c9e8f7', plat:'#48484f', platDk:'#2b2b30', edge:'rgba(255,214,60,0.9)', decor:'city' }, npcs:[] },
+      theme:{ skyTop:'#6fb3e8', skyBot:'#c9e8f7', plat:'#48484f', platDk:'#2b2b30', edge:'rgba(255,214,60,0.9)', decor:'city' },
+      npcs:[{ pos:'end', key:'nilson', name:'SR. NILSON', line:'E aí, Leandrinho das gatas!' }] },
     { key:'engenharia', name:'ENGENHARIA', icon:'🏭', width:9000, enemyPool:['geraldo','sol','sofrer','bola','veado','adriana'], hazard:true, boss:true,
       theme:{ skyTop:'#d3f2e6', skyBot:'#a9dfc9', plat:'#1e9c7a', platDk:'#116048', edge:'rgba(255,255,255,0.75)', decor:'gears' },
       npcs:[{ pos:'end', key:'rodolfo', name:'LEANDRINHO', line:'Como você está?', name2:'RODOLFO', line2:'"NÃO COMO TU..."' }] },
@@ -770,16 +782,29 @@
       }
     }
 
-    let bossArenaX = null;
+    let bossArenaX = null, bossArenaW = 0;
     if(spec.boss){
-      // a wide, flat, gap-free arena for the boss fight before the flag
+      // a wide arena for the boss fight, with climbable blocks to run and
+      // escape across, before the flag
       bossArenaX = x + 40;
-      platforms.push({x, w: 900, y:0});
+      bossArenaW = 1100;
+      platforms.push({x, w: bossArenaW, y:0});
+      // climbable/escape blocks - standing on these disables stomping (see
+      // the "no kills from the blocks" rule in update()), they're purely
+      // for running and dodging
+      platforms.push({x:bossArenaX+220, w:110, y:80, bossBlock:true});
+      platforms.push({x:bossArenaX+430, w:100, y:130, bossBlock:true});
+      platforms.push({x:bossArenaX+650, w:110, y:80, bossBlock:true});
+      platforms.push({x:bossArenaX+860, w:100, y:130, bossBlock:true});
+      // energy-drink cans scattered around the arena to help in the fight
+      items.push({ x:bossArenaX+220+55, y:80+58, e:'🥫', power:true });
+      items.push({ x:bossArenaX+650+55, y:80+58, e:'🥫', power:true });
+      items.push({ x:bossArenaX+950, y:58, e:'🥫', power:true });
       enemies.push({
-        x: bossArenaX+620, minX:bossArenaX+500, maxX:bossArenaX+780, y:0,
-        speed:0, type:'geraldoFinal', boss:true, hp:5, maxHp:5, throwT:2.5
+        x: bossArenaX+700, minX:bossArenaX+260, maxX:bossArenaX+980, y:0,
+        speed:58, type:'geraldoFinal', boss:true, hp:8, maxHp:8, throwT:2.6
       });
-      x += 900;
+      x += bossArenaW;
     }
 
     const flagPlatW = 240;
@@ -793,11 +818,12 @@
       y: 0, key:n.key, name:n.name, name2:n.name2, line:n.line, line2:n.line2, triggered:false
     }));
     if(spec.boss){
-      npcs.push({ x: bossArenaX+140, y:0, key:'cage', name:'', line:'', triggered:true, cage:true });
+      // the cage sits in the center of the arena, not off to one side
+      npcs.push({ x: bossArenaX+bossArenaW/2, y:0, key:'cage', name:'', line:'', triggered:true, cage:true });
     }
 
     const gyPlatforms = platforms.map(p => ({
-      x:p.x, w:p.w, y: gY - p.y, bump: !!p.bump,
+      x:p.x, w:p.w, y: gY - p.y, bump: !!p.bump, bossBlock: !!p.bossBlock,
       thick: p.bump ? p.y : (p.y===0 ? (H-gY+40) : 18)
     }));
     const gyItems = items.map(it => ({ x:it.x, y: gY-it.y, emoji:it.e, taken:false, bob:Math.random()*10, power:!!it.power, life:!!it.life }));
@@ -812,7 +838,9 @@
 
     return {
       name: spec.name, icon: spec.icon, bike: !!spec.bike, theme: spec.theme, boss: !!spec.boss,
-      bossArenaX, bossDefeated: false,
+      bossArenaX, bossArenaW, bossDefeated: false, shoutedYet: false,
+      mayraX: bossArenaX!=null ? bossArenaX+bossArenaW/2-14 : 0,
+      marcoX: bossArenaX!=null ? bossArenaX+bossArenaW/2+14 : 0,
       width: flagX+160, platforms: gyPlatforms, items: gyItems, enemies: gyEnemies,
       hazards: gyHazards, npcs: gyNpcs, flagX, itemsTotal: gyItems.filter(i=>!i.power && !i.life).length,
       bananas: [], scissors: [],
@@ -830,7 +858,7 @@
     return {
       phase, level,
       px: 70, py: groundY(), vx:0, vy:0, onGround:true, facing:1, moving:false,
-      jumping:false, jumpT:0,
+      jumping:false, jumpT:0, onBossBlock:false,
       lastSafeX: 70, lastSafeY: groundY(),
       lives: carry ? carry.lives : 3,
       maxLives: carry ? carry.maxLives : 3,
@@ -1001,6 +1029,8 @@
       game.level.bossDefeated = true;
       game.score += 300;
       spawnParticles(x, y-20, '#ffc72c', 30);
+      sfx.victory();
+      showNpcBubble('LEANDRINHO', 'IRRAAAAA!!', 2600);
     }
   }
 
@@ -1038,6 +1068,7 @@
         if(game.vy >= 0 && prevBottom <= p.y+2 && game.py >= p.y){
           game.py = p.y; game.vy = 0; game.onGround = true; game.jumping = false;
           game.lastSafeX = game.px; game.lastSafeY = p.y;
+          game.onBossBlock = !!p.bossBlock;
         }
       }
     }
@@ -1100,19 +1131,33 @@
       }
     }
 
-    // vitória-régia - a SOLID obstacle, always: you physically cannot walk
-    // through it, only over it (jumping). The neck-stretch is just visual
-    // flavor now; whether stretched or tucked, it's still a wall you must
-    // clear, and touching it without clearing always costs a life.
+    // vitória-régia - stretches up and HOLDS there for a beat (fully
+    // impassable while up, not even a jump clears it), then tucks down and
+    // HOLDS there too (where it's a normal jump-over wall). Real timing
+    // puzzle: wait for it to go down, then jump the moment it's low.
     for(const hz of lvl.hazards){
-      hz.phase += dt*1.3;
-      hz.stretch = (Math.sin(hz.phase)+1)/2;
-      const cleared = game.py <= groundY() - 46;
-      const half = (hz.w||20)/2 + 16;
-      if(!cleared && Math.abs(hz.x-game.px) < half){
-        const dir = game.px < hz.x ? -1 : 1;
-        game.px = hz.x + dir*half;
-        if(game.invulnT <= 0) hurt(true, dir);
+      hz.phase += dt;
+      const HOLD_UP = 2.5, TRANS = 0.6, HOLD_DOWN = 2.5;
+      const cycle = HOLD_UP + TRANS + HOLD_DOWN + TRANS;
+      const t = hz.phase % cycle;
+      let stretch;
+      if(t < HOLD_UP) stretch = 1;                                          // fully up, HELD still
+      else if(t < HOLD_UP+TRANS) stretch = 1-(t-HOLD_UP)/TRANS;              // retracting
+      else if(t < HOLD_UP+TRANS+HOLD_DOWN) stretch = 0;                     // fully down, HELD still
+      else stretch = (t-(HOLD_UP+TRANS+HOLD_DOWN))/TRANS;                   // extending back up
+      hz.stretch = Math.max(0, Math.min(1, stretch));
+
+      const half = (hz.w||20)/2 + 18;
+      if(Math.abs(hz.x-game.px) < half){
+        const fullyUp = hz.stretch > 0.85;
+        // while stretched up, NOTHING clears it - not even a full jump.
+        // only when it's tucked down (stretch near 0) can a jump pass over.
+        const cleared = !fullyUp && game.py <= groundY() - 46;
+        if(!cleared){
+          const dir = game.px < hz.x ? -1 : 1;
+          game.px = hz.x + dir*half;
+          if(game.invulnT <= 0) hurt(true, dir);
+        }
       }
     }
 
@@ -1125,12 +1170,18 @@
       if(en.flashT > 0) en.flashT -= dt;
 
       if(en.boss){
-        // the final Geraldo doesn't patrol - he stands his ground and
-        // lobs bananas at intervals long enough to react and jump
+        // the final Geraldo actively chases the player around the arena
+        const chaseDir = game.px < en.x ? -1 : 1;
+        let nx = en.x + chaseDir*en.speed*dt;
+        nx = Math.max(en.minX, Math.min(en.maxX, nx));
+        en.dir = chaseDir;
+        en.x = nx;
+        // ...and still lobs bananas at intervals long enough to react and jump
         en.throwT -= dt;
         if(en.throwT <= 0){
-          en.throwT = 2.3 + Math.random()*0.9;
-          lvl.bananas.push({ x: en.x-30, y: groundY(), vx: -190, life: 4 });
+          en.throwT = 2.1 + Math.random()*0.8;
+          const bvx = en.x > game.px ? -190 : 190;
+          lvl.bananas.push({ x: en.x + (bvx>0?30:-30), y: groundY(), vx: bvx, life: 4 });
         }
       } else {
         let dir = en.dir;
@@ -1176,7 +1227,7 @@
       // would burn your feet), only the energy-drink projectile takes it
       // down; any contact with it just hurts the player instead.
       const eh = ENEMY_HEIGHT[en.type] || (en.boss ? 60 : 50);
-      const canStomp = en.type !== 'sol';
+      const canStomp = en.type !== 'sol' && !game.onBossBlock;
       const dx = Math.abs(en.x - game.px), footGap = en.y - game.py;
       // must be vertically close enough to actually be touching the
       // enemy's body - this was missing for non-stompable enemies, which
@@ -1195,7 +1246,7 @@
 
     // boss barrier - can't walk past the final Geraldo until he's down
     if(lvl.boss && !lvl.bossDefeated && lvl.bossArenaX!=null){
-      const barrierX = lvl.bossArenaX + 850;
+      const barrierX = lvl.bossArenaX + 1030;
       if(game.px > barrierX) game.px = barrierX;
     }
 
@@ -1239,6 +1290,13 @@
       } else {
         lvl.scissorCooldown = 0.6; // try again shortly once an Adriana is on screen
       }
+    }
+
+    // once freed, Mayra & Marco Túlio follow Leandrinho the rest of the way
+    if(lvl.boss && lvl.bossDefeated){
+      const targetM = game.px - 46, targetT = game.px - 80;
+      lvl.mayraX += (targetM - lvl.mayraX) * Math.min(1, dt*3);
+      lvl.marcoX += (targetT - lvl.marcoX) * Math.min(1, dt*3);
     }
 
     // NPC dialogue triggers
@@ -1685,29 +1743,31 @@
 
     // NPCs (townsfolk) - the boss arena has a special caged pair instead
     lvl.npcs.forEach(n => {
-      if(n.x < camX-100 || n.x > camX+W+100) return;
       if(n.cage){
         const freed = lvl.bossDefeated;
+        const cx = freed ? (lvl.mayraX+lvl.marcoX)/2 : n.x;
+        if(cx < camX-100 || cx > camX+W+100) return;
         ctx.save();
-        ctx.translate(n.x, n.y);
+        ctx.translate(freed ? 0 : n.x, n.y);
         if(!freed){
           ctx.fillStyle = 'rgba(0,0,0,0.15)';
           ctx.fillRect(-34,-90,68,90);
-        }
-        drawNPC(ctx, -14, 0, 0.85, 'mayra', game.t*2);
-        drawNPC(ctx, 14, 0, 0.85, 'marcotulio', game.t*2);
-        if(!freed){
+          drawNPC(ctx, -14, 0, 0.85, 'mayra', game.t*2);
+          drawNPC(ctx, 14, 0, 0.85, 'marcotulio', game.t*2);
           ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 4;
           for(let bx=-32; bx<=32; bx+=10){ ctx.beginPath(); ctx.moveTo(bx,-92); ctx.lineTo(bx,4); ctx.stroke(); }
           ctx.beginPath(); ctx.moveTo(-34,-92); ctx.lineTo(34,-92); ctx.stroke();
         } else {
+          drawNPC(ctx, lvl.mayraX, n.y, 0.85, 'mayra', game.t*2);
+          drawNPC(ctx, lvl.marcoX, n.y, 0.85, 'marcotulio', game.t*2);
           ctx.fillStyle = 'rgba(255,199,44,0.9)';
           ctx.font = '20px sans-serif'; ctx.textAlign='center';
-          ctx.fillText('🎉', 0, -100);
+          ctx.fillText('🎉', (lvl.mayraX+lvl.marcoX)/2, n.y-100);
         }
         ctx.restore();
         return;
       }
+      if(n.x < camX-100 || n.x > camX+W+100) return;
       drawNPC(ctx, n.x, n.y, 1.05, n.key, game.t*2);
     });
 
@@ -1745,10 +1805,16 @@
       }
       const drawFn = ENEMY_DRAW[en.type] || drawGeraldo;
       const extra = en.type==='bola' ? { color:en.color, rollX:en.rollX } : {};
+      // most enemy art naturally faces left, so moving right needs a flip -
+      // the veado's art was drawn facing right by default, so it uses the
+      // opposite convention (this was backwards before, hence walking
+      // "backwards" visually).
+      const faceMul = en.type === 'veado' ? 1 : -1;
+      const facing = en.dir>0 ? faceMul : -faceMul;
       if(!en.alive){
-        drawFn(ctx, en.x, en.y+8, 1.1, { phase:en.phase, jumping:false, moving:false, facing: en.dir>0?-1:1, squish: en.squish, ...extra });
+        drawFn(ctx, en.x, en.y+8, 1.1, { phase:en.phase, jumping:false, moving:false, facing, squish: en.squish, ...extra });
       } else {
-        drawFn(ctx, en.x, en.y, 1.1, { phase:en.phase, jumping:false, moving:true, facing: en.dir>0?-1:1, ...extra });
+        drawFn(ctx, en.x, en.y, 1.1, { phase:en.phase, jumping:false, moving:true, facing, ...extra });
       }
     });
 
@@ -1802,7 +1868,8 @@
       jumping: lvl.bike ? false : !game.onGround,
       jumpT,
       moving: lvl.bike ? false : game.moving,
-      facing: game.facing
+      facing: game.facing,
+      helmet: lvl.bike
     });
     if(powerBlink) ctx.restore();
     ctx.globalAlpha = 1;
