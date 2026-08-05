@@ -1,6 +1,6 @@
 {
   "name": "PEGA LEANDRINHO",
-  "short_name": "Leandrinho",
+  "short_name": "Pega Leandrinho",
   "description": "Jogo de plataforma da fábrica de móveis - fuja do Geraldo!",
   "start_url": "./index.html",
   "scope": "./",

@@ -576,7 +576,7 @@
   }
 
   const ENEMY_DRAW = { geraldo: drawGeraldo, sol: drawSol, sofrer: drawSofrer, bola: drawBola, veado: drawVeado, adriana: drawAdriana };
-  const ENEMY_HEIGHT = { geraldo: 57, sol: 38, sofrer: 40, bola: 48, veado: 46, adriana: 57 };
+  const ENEMY_HEIGHT = { geraldo: 57, sol: 38, sofrer: 40, bola: 48, veado: 46, adriana: 57, geraldoFinal: 118 };
   const BOLA_COLORS = ['#e6432c','#4fc3f7','#ffc72c','#8fe08a','#b56ae0'];
 
   /* ---- generic NPC (townsfolk) - idle only, distinguished by accessories ---- */
@@ -784,25 +784,32 @@
 
     let bossArenaX = null, bossArenaW = 0;
     if(spec.boss){
-      // a wide arena for the boss fight, with climbable blocks to run and
-      // escape across, before the flag
+      // the arena is sized to fit in ONE locked screen (see the camera
+      // lock in render/update) - like the classic "single room" final
+      // fight, no scrolling once you're inside
       bossArenaX = x + 40;
-      bossArenaW = 1100;
+      bossArenaW = Math.max(420, Math.round(W) - 24);
       platforms.push({x, w: bossArenaW, y:0});
-      // climbable/escape blocks - standing on these disables stomping (see
-      // the "no kills from the blocks" rule in update()), they're purely
-      // for running and dodging
-      platforms.push({x:bossArenaX+220, w:110, y:80, bossBlock:true});
-      platforms.push({x:bossArenaX+430, w:100, y:130, bossBlock:true});
-      platforms.push({x:bossArenaX+650, w:110, y:80, bossBlock:true});
-      platforms.push({x:bossArenaX+860, w:100, y:130, bossBlock:true});
-      // energy-drink cans scattered around the arena to help in the fight
-      items.push({ x:bossArenaX+220+55, y:80+58, e:'🥫', power:true });
-      items.push({ x:bossArenaX+650+55, y:80+58, e:'🥫', power:true });
-      items.push({ x:bossArenaX+950, y:58, e:'🥫', power:true });
+
+      // LOTS of climbable blocks across three tiers - Geraldo never
+      // leaves the ground, so once you're up here he genuinely cannot
+      // reach or climb to you. Real escape routes, not just a couple of
+      // isolated platforms.
+      const tier1Y = 78, tier2Y = 150, tier3Y = 215;
+      const t1 = [0.08, 0.32, 0.56, 0.80];
+      const t2 = [0.20, 0.44, 0.68, 0.90];
+      const t3 = [0.34, 0.58, 0.80];
+      t1.forEach(f => platforms.push({x:bossArenaX+bossArenaW*f, w:60, y:tier1Y, bossBlock:true}));
+      t2.forEach(f => platforms.push({x:bossArenaX+bossArenaW*f, w:56, y:tier2Y, bossBlock:true}));
+      t3.forEach(f => platforms.push({x:bossArenaX+bossArenaW*f, w:52, y:tier3Y, bossBlock:true}));
+
+      // a couple of starting cans up on the first tier
+      items.push({x:bossArenaX+bossArenaW*0.08+30, y:tier1Y+58, e:'🥫', power:true});
+      items.push({x:bossArenaX+bossArenaW*0.80+30, y:tier1Y+58, e:'🥫', power:true});
+
       enemies.push({
-        x: bossArenaX+700, minX:bossArenaX+260, maxX:bossArenaX+980, y:0,
-        speed:58, type:'geraldoFinal', boss:true, hp:8, maxHp:8, throwT:2.6
+        x: bossArenaX+bossArenaW*0.5, minX:bossArenaX+30, maxX:bossArenaX+bossArenaW-30, y:0,
+        speed:58, type:'geraldoFinal', boss:true, hp:15, maxHp:15, throwT:2.6, finalCansSpawned:false
       });
       x += bossArenaW;
     }
@@ -839,6 +846,7 @@
     return {
       name: spec.name, icon: spec.icon, bike: !!spec.bike, theme: spec.theme, boss: !!spec.boss,
       bossArenaX, bossArenaW, bossDefeated: false, shoutedYet: false,
+      bossIntroPlayed: false,
       mayraX: bossArenaX!=null ? bossArenaX+bossArenaW/2-14 : 0,
       marcoX: bossArenaX!=null ? bossArenaX+bossArenaW/2+14 : 0,
       width: flagX+160, platforms: gyPlatforms, items: gyItems, enemies: gyEnemies,
@@ -859,6 +867,7 @@
       phase, level,
       px: 70, py: groundY(), vx:0, vy:0, onGround:true, facing:1, moving:false,
       jumping:false, jumpT:0, onBossBlock:false,
+      frozen:false, bossIntroT:0,
       lastSafeX: 70, lastSafeY: groundY(),
       lives: carry ? carry.lives : 3,
       maxLives: carry ? carry.maxLives : 3,
@@ -1049,6 +1058,21 @@
   function update(dt){
     game.t += dt;
     const lvl = game.level;
+
+    // boss reveal: entering the arena freezes the action and shakes the
+    // screen for a beat, then the fight actually starts
+    if(lvl.boss && !lvl.bossIntroPlayed && lvl.bossArenaX!=null && game.px > lvl.bossArenaX - 10){
+      lvl.bossIntroPlayed = true;
+      game.frozen = true;
+      game.bossIntroT = 1.3;
+      sfx.damage();
+    }
+    if(game.frozen){
+      game.bossIntroT -= dt;
+      if(game.bossIntroT <= 0){ game.frozen = false; game.bossIntroT = 0; }
+      updateHud();
+      return;
+    }
 
     let ax = 0;
     if(game.keys.left){ ax = -1; game.facing = -1; }
@@ -1242,7 +1266,8 @@
       // hit by a thrown can
       for(const pr of game.projectiles){
         if(pr.hit) continue;
-        if(Math.abs(pr.x-en.x) < 22 && Math.abs(pr.y-(en.y-20)) < 28){
+        const hitRX = en.boss ? 40 : 22, hitRY = en.boss ? 70 : 28;
+        if(Math.abs(pr.x-en.x) < hitRX && Math.abs(pr.y-(en.y-20)) < hitRY){
           pr.hit = true; pr.life = 0;
           if(en.boss){ bossHit(en); } else { killEnemy(en, en.x, en.y-30); }
         }
@@ -1262,7 +1287,7 @@
       // caused damage from merely being nearby horizontally (even mid-air,
       // well above the enemy) before any real contact happened.
       const verticallyClose = footGap > -eh*0.35 && footGap < eh*1.5;
-      if(dx < (en.boss?36:30) && verticallyClose){
+      if(dx < (en.boss?58:30) && verticallyClose){
         if(canStomp && game.vy > -80 && footGap > eh*0.22){
           if(en.boss){ bossHit(en); } else { killEnemy(en, en.x, en.y-40); }
           game.vy = -420;
@@ -1274,8 +1299,17 @@
 
     // boss barrier - can't walk past the final Geraldo until he's down
     if(lvl.boss && !lvl.bossDefeated && lvl.bossArenaX!=null){
-      const barrierX = lvl.bossArenaX + 1030;
+      const barrierX = lvl.bossArenaX + lvl.bossArenaW - 20;
       if(game.px > barrierX) game.px = barrierX;
+
+      // one extra pair of cans for the final push, once he's almost down -
+      // not random pop-ins mid-fight anymore, just a reward near the end
+      const boss = lvl.enemies.find(e => e.boss);
+      if(boss && boss.alive && !boss.finalCansSpawned && boss.hp <= 5){
+        boss.finalCansSpawned = true;
+        lvl.items.push({ x:lvl.bossArenaX+lvl.bossArenaW*0.32, y: groundY()-150-58, emoji:'🥫', taken:false, bob:Math.random()*10, power:true, life:false });
+        lvl.items.push({ x:lvl.bossArenaX+lvl.bossArenaW*0.68, y: groundY()-150-58, emoji:'🥫', taken:false, bob:Math.random()*10, power:true, life:false });
+      }
     }
 
     // thrown bananas from the boss
@@ -1320,11 +1354,15 @@
       }
     }
 
-    // once freed, Mayra & Marco Túlio follow Leandrinho the rest of the way
+    // once freed, Mayra & Marco Túlio follow Leandrinho the rest of the way -
+    // fast catch-up plus a hard distance clamp, so they can never lag far
+    // enough behind to fall off the visible screen
     if(lvl.boss && lvl.bossDefeated){
       const targetM = game.px - 46, targetT = game.px - 80;
-      lvl.mayraX += (targetM - lvl.mayraX) * Math.min(1, dt*3);
-      lvl.marcoX += (targetT - lvl.marcoX) * Math.min(1, dt*3);
+      lvl.mayraX += (targetM - lvl.mayraX) * Math.min(1, dt*6);
+      lvl.marcoX += (targetT - lvl.marcoX) * Math.min(1, dt*6);
+      if(game.px - lvl.mayraX > 130) lvl.mayraX = game.px - 130;
+      if(game.px - lvl.marcoX > 160) lvl.marcoX = game.px - 160;
     }
 
     // NPC dialogue triggers
@@ -1344,7 +1382,15 @@
       phaseComplete();
     }
 
-    const targetCam = Math.max(0, Math.min(lvl.width - W, game.px - W*0.38));
+    // camera: locked to a single fixed screen for the whole boss fight
+    // (no scrolling at all, like the final room in Super Mario), back to
+    // normal following once he's defeated
+    let targetCam;
+    if(lvl.boss && lvl.bossArenaX!=null && game.px > lvl.bossArenaX - 30 && !lvl.bossDefeated){
+      targetCam = Math.max(0, Math.min(lvl.width - W, lvl.bossArenaX - 40));
+    } else {
+      targetCam = Math.max(0, Math.min(lvl.width - W, game.px - W*0.38));
+    }
     game.camX += (targetCam - game.camX) * Math.min(1, dt*8);
 
     updateHud();
@@ -1721,7 +1767,13 @@
     }
 
     ctx.save();
-    ctx.translate(-camX, 0);
+    let shakeX = 0, shakeY = 0;
+    if(game.frozen && game.bossIntroT > 0){
+      const power = Math.min(1, game.bossIntroT/1.3) * 16;
+      shakeX = (Math.random()-0.5)*power;
+      shakeY = (Math.random()-0.5)*power*0.6;
+    }
+    ctx.translate(-camX+shakeX, shakeY);
 
     lvl.platforms.forEach(p => {
       if(p.x+p.w < camX-80 || p.x > camX+W+80) return;
@@ -1773,8 +1825,9 @@
     lvl.npcs.forEach(n => {
       if(n.cage){
         const freed = lvl.bossDefeated;
-        const cx = freed ? (lvl.mayraX+lvl.marcoX)/2 : n.x;
-        if(cx < camX-100 || cx > camX+W+100) return;
+        if(!freed){
+          if(n.x < camX-100 || n.x > camX+W+100) return;
+        }
         ctx.save();
         ctx.translate(freed ? 0 : n.x, n.y);
         if(!freed){
@@ -1820,6 +1873,9 @@
       if(en.x < camX-100 || en.x > camX+W+100) return;
       if(en.boss){
         if(!en.alive) return;
+        if(lvl.boss && !lvl.bossIntroPlayed) return; // hidden until he's revealed
+        const hiding = game.frozen && game.bossIntroT > 0;
+        if(hiding) return; // stays hidden through the shake, then pops in
         const flash = en.flashT > 0 && Math.floor(game.t*20)%2===0;
         ctx.save(); if(flash) ctx.filter = 'brightness(2)';
         drawGeraldo(ctx, en.x, en.y, 2.1, { phase:en.phase, jumping:false, moving:false, facing:-1 });
