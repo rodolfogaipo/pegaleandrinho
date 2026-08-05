@@ -809,7 +809,7 @@
 
       enemies.push({
         x: bossArenaX+bossArenaW*0.5, minX:bossArenaX+30, maxX:bossArenaX+bossArenaW-30, y:0,
-        speed:58, type:'geraldoFinal', boss:true, hp:15, maxHp:15, throwT:2.6, finalCansSpawned:false
+        speed:58, type:'geraldoFinal', boss:true, hp:22, maxHp:22, throwT:2.6, finalCansSpawned:false
       });
       x += bossArenaW;
     }
@@ -824,10 +824,6 @@
       x: n.pos==='start' ? 160 : flagPlatX + 40,
       y: 0, key:n.key, name:n.name, name2:n.name2, line:n.line, line2:n.line2, triggered:false
     }));
-    if(spec.boss){
-      // the cage sits in the center of the arena, not off to one side
-      npcs.push({ x: bossArenaX+bossArenaW/2, y:0, key:'cage', name:'', line:'', triggered:true, cage:true });
-    }
 
     const gyPlatforms = platforms.map(p => ({
       x:p.x, w:p.w, y: gY - p.y, bump: !!p.bump, bossBlock: !!p.bossBlock,
@@ -1050,6 +1046,10 @@
     en.flashT = 0.3;
     spawnParticles(en.x, en.y-40, '#ffc72c', 8);
     sfx.stomp();
+    // he gets knocked back and staggers - never just stands there taking it
+    const kdir = en.x < game.px ? -1 : 1;
+    en.x = Math.max(en.minX, Math.min(en.maxX, en.x + kdir*46));
+    en.staggerT = 0.35;
     if(en.hp <= 0){
       killEnemy(en, en.x, en.y-40);
     }
@@ -1222,18 +1222,29 @@
       if(en.flashT > 0) en.flashT -= dt;
 
       if(en.boss){
+        if(en.staggerT > 0) en.staggerT -= dt;
         // the final Geraldo actively chases the player around the arena
-        const chaseDir = game.px < en.x ? -1 : 1;
-        let nx = en.x + chaseDir*en.speed*dt;
-        nx = Math.max(en.minX, Math.min(en.maxX, nx));
-        en.dir = chaseDir;
-        en.x = nx;
-        // ...and still lobs bananas at intervals long enough to react and jump
+        // (unless he's staggering from a hit - he's never just standing
+        // there passively waiting to be jumped on again)
+        if(en.staggerT <= 0){
+          const chaseDir = game.px < en.x ? -1 : 1;
+          let nx = en.x + chaseDir*en.speed*dt;
+          nx = Math.max(en.minX, Math.min(en.maxX, nx));
+          en.dir = chaseDir;
+          en.x = nx;
+        }
+        // lobs bananas aimed at wherever Leandrinho currently is - x AND
+        // y - so standing on a block isn't automatic total safety; the
+        // arc is computed to actually reach his current height
         en.throwT -= dt;
         if(en.throwT <= 0){
-          en.throwT = 2.1 + Math.random()*0.8;
-          const bvx = en.x > game.px ? -190 : 190;
-          lvl.bananas.push({ x: en.x + (bvx>0?30:-30), y: groundY(), vx: bvx, life: 4 });
+          en.throwT = 1.9 + Math.random()*0.7;
+          const startY = groundY()-14;
+          const throwTime = 0.85;
+          const bvx = (game.px - en.x) / throwTime;
+          const dy = game.py - startY; // negative if he's up on a block
+          const bvy = (dy - 0.5*900*throwTime*throwTime) / throwTime;
+          lvl.bananas.push({ x: en.x, y: startY, vx: bvx, vy: bvy, life: 3 });
         }
       } else {
         let dir = en.dir;
@@ -1305,18 +1316,24 @@
       // one extra pair of cans for the final push, once he's almost down -
       // not random pop-ins mid-fight anymore, just a reward near the end
       const boss = lvl.enemies.find(e => e.boss);
-      if(boss && boss.alive && !boss.finalCansSpawned && boss.hp <= 5){
+      if(boss && boss.alive && !boss.finalCansSpawned && boss.hp <= 8){
         boss.finalCansSpawned = true;
         lvl.items.push({ x:lvl.bossArenaX+lvl.bossArenaW*0.32, y: groundY()-150-58, emoji:'🥫', taken:false, bob:Math.random()*10, power:true, life:false });
         lvl.items.push({ x:lvl.bossArenaX+lvl.bossArenaW*0.68, y: groundY()-150-58, emoji:'🥫', taken:false, bob:Math.random()*10, power:true, life:false });
       }
     }
 
-    // thrown bananas from the boss
-    lvl.bananas && lvl.bananas.forEach(b => { b.x += b.vx*dt; b.life -= dt; });
-    if(lvl.bananas) lvl.bananas = lvl.bananas.filter(b => b.life > 0);
+    // thrown bananas from the boss - real arcing throw, aimed at the
+    // player, so you actually have to read and dodge/jump it
+    lvl.bananas && lvl.bananas.forEach(b => {
+      b.x += b.vx*dt;
+      b.vy += 900*dt;
+      b.y += b.vy*dt;
+      b.life -= dt;
+    });
+    if(lvl.bananas) lvl.bananas = lvl.bananas.filter(b => b.life > 0 && b.y <= groundY()+8);
     if(lvl.bananas) for(const b of lvl.bananas){
-      if(!b.hit && Math.abs(b.x-game.px) < 20 && game.py >= groundY()-26 && game.invulnT<=0){
+      if(!b.hit && Math.abs(b.x-game.px) < 20 && Math.abs(b.y-game.py) < 34 && game.invulnT<=0){
         b.hit = true; hurt(true, b.vx<0?1:-1);
       }
     }
@@ -1821,36 +1838,36 @@
       ctx.fillText(it.emoji, it.x, it.y-6+bob);
     });
 
-    // NPCs (townsfolk) - the boss arena has a special caged pair instead
+    // NPCs (townsfolk)
     lvl.npcs.forEach(n => {
-      if(n.cage){
-        const freed = lvl.bossDefeated;
-        if(!freed){
-          if(n.x < camX-100 || n.x > camX+W+100) return;
-        }
-        ctx.save();
-        ctx.translate(freed ? 0 : n.x, n.y);
-        if(!freed){
-          ctx.fillStyle = 'rgba(0,0,0,0.15)';
-          ctx.fillRect(-34,-90,68,90);
-          drawNPC(ctx, -14, 0, 0.85, 'mayra', game.t*2);
-          drawNPC(ctx, 14, 0, 0.85, 'marcotulio', game.t*2);
-          ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 4;
-          for(let bx=-32; bx<=32; bx+=10){ ctx.beginPath(); ctx.moveTo(bx,-92); ctx.lineTo(bx,4); ctx.stroke(); }
-          ctx.beginPath(); ctx.moveTo(-34,-92); ctx.lineTo(34,-92); ctx.stroke();
-        } else {
-          drawNPC(ctx, lvl.mayraX, n.y, 0.85, 'mayra', game.t*2);
-          drawNPC(ctx, lvl.marcoX, n.y, 0.85, 'marcotulio', game.t*2);
-          ctx.fillStyle = 'rgba(255,199,44,0.9)';
-          ctx.font = '20px sans-serif'; ctx.textAlign='center';
-          ctx.fillText('🎉', (lvl.mayraX+lvl.marcoX)/2, n.y-100);
-        }
-        ctx.restore();
-        return;
-      }
       if(n.x < camX-100 || n.x > camX+W+100) return;
       drawNPC(ctx, n.x, n.y, 1.05, n.key, game.t*2);
     });
+
+    // Mayra & Marco Túlio - drawn directly and unconditionally whenever
+    // this is a boss level, completely separate from the generic NPC list
+    // (and its culling) so they can NEVER accidentally fail to render.
+    if(lvl.boss && lvl.bossArenaX != null){
+      if(!lvl.bossDefeated){
+        const cx = lvl.bossArenaX + lvl.bossArenaW/2;
+        ctx.save();
+        ctx.translate(cx, gY);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(-34,-90,68,90);
+        drawNPC(ctx, -14, 0, 0.85, 'mayra', game.t*2);
+        drawNPC(ctx, 14, 0, 0.85, 'marcotulio', game.t*2);
+        ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 4;
+        for(let bx=-32; bx<=32; bx+=10){ ctx.beginPath(); ctx.moveTo(bx,-92); ctx.lineTo(bx,4); ctx.stroke(); }
+        ctx.beginPath(); ctx.moveTo(-34,-92); ctx.lineTo(34,-92); ctx.stroke();
+        ctx.restore();
+      } else {
+        drawNPC(ctx, lvl.mayraX, gY, 0.85, 'mayra', game.t*2);
+        drawNPC(ctx, lvl.marcoX, gY, 0.85, 'marcotulio', game.t*2);
+        ctx.fillStyle = 'rgba(255,199,44,0.9)';
+        ctx.font = '18px sans-serif'; ctx.textAlign='center';
+        ctx.fillText('🎉', (lvl.mayraX+lvl.marcoX)/2, gY-100);
+      }
+    }
 
     // vitória-régia biting plants
     lvl.hazards.forEach(hz => {
