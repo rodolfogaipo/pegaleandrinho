@@ -1235,16 +1235,28 @@
         }
         // lobs bananas aimed at wherever Leandrinho currently is - x AND
         // y - so standing on a block isn't automatic total safety; the
-        // arc is computed to actually reach his current height
+        // arc is computed to actually reach his current height. Only
+        // throws when he's actually VISIBLE on screen (same rule as
+        // Adriana's scissors) - never a surprise hit from off-camera.
+        // Horizontal speed matches the scissors' throw speed (230).
         en.throwT -= dt;
         if(en.throwT <= 0){
-          en.throwT = 1.9 + Math.random()*0.7;
-          const startY = groundY()-14;
-          const throwTime = 0.85;
-          const bvx = (game.px - en.x) / throwTime;
-          const dy = game.py - startY; // negative if he's up on a block
-          const bvy = (dy - 0.5*900*throwTime*throwTime) / throwTime;
-          lvl.bananas.push({ x: en.x, y: startY, vx: bvx, vy: bvy, life: 3 });
+          const margin = 40;
+          const visible = en.x > game.camX+margin && en.x < game.camX+W-margin;
+          if(visible){
+            en.throwT = 1.9 + Math.random()*0.7;
+            const startY = groundY()-14;
+            const speed = 230;
+            const dir = game.px >= en.x ? 1 : -1;
+            const dx = Math.abs(game.px - en.x);
+            const throwTime = Math.max(dx/speed, 0.15);
+            const bvx = dir*speed;
+            const dy = game.py - startY; // negative if he's up on a block
+            const bvy = (dy - 0.5*900*throwTime*throwTime) / throwTime;
+            lvl.bananas.push({ x: en.x, y: startY, vx: bvx, vy: bvy, life: 3 });
+          } else {
+            en.throwT = 0.3; // try again shortly once he's back on screen
+          }
         }
       } else {
         let dir = en.dir;
